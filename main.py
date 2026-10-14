@@ -57,7 +57,12 @@ def make_handler(controller, page, page_token, simulation, on_fault=None):
                     raise CommandError("Invalid request size") from error
                 if not 0 < length <= 2048:
                     raise CommandError("Invalid request size")
-                data = json.loads(self.rfile.read(length))
+                try:
+                    body = self.rfile.read(length)
+                except (TimeoutError, ConnectionError):
+                    # A stalled/disconnected client is not a GPIO failure.
+                    return
+                data = json.loads(body)
                 if not isinstance(data, dict):
                     raise CommandError("Expected an object")
                 if self.path == "/acquire":
@@ -70,9 +75,9 @@ def make_handler(controller, page, page_token, simulation, on_fault=None):
                 else:
                     self.respond(404, {"error": "Not found"})
                     return
-                self.respond(200, result)
             except (CommandError, json.JSONDecodeError, UnicodeDecodeError) as error:
                 self.respond(400, {"error": str(error)})
+                return
             except Exception:
                 # Hardware errors must stop motion and terminate the service.
                 try:
@@ -81,6 +86,9 @@ def make_handler(controller, page, page_token, simulation, on_fault=None):
                     if on_fault is not None:
                         on_fault()
                 raise
+            # Response delivery can fail after a valid command. Let the request
+            # handler close that connection; the watchdog still expires motion.
+            self.respond(200, result)
 
         def setup(self):
             super().setup()

@@ -54,7 +54,7 @@ class Controller:
                 raise CommandError("Control session expired; release and press again")
             if type(sequence) is not int or sequence <= self.sequence:
                 raise CommandError("Old or duplicate command")
-            if action not in {"forward", "backward", "left", "right", "stop", "release", "reset"}:
+            if not isinstance(action, str) or action not in {"forward", "backward", "left", "right", "stop", "release", "reset"}:
                 raise CommandError("Unknown command")
             self.sequence = sequence
             if action in {"release", "reset"}:

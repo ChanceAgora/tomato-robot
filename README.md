@@ -140,6 +140,9 @@ python3 -m compileall -q main.py controller.py hardware.py config.py tests
 Automated tests cover direction commands, timeout and renewal, stale packets,
 operator ownership, input validation, startup, release/reset, and stop behavior.
 The default HTTP tests exercise request parsing without opening a network port.
+Malformed action values return a bad-request response. Client body timeouts and
+response disconnects do not shut down the service; movement still expires through
+the independent watchdog. Hardware command failures terminate the service.
 For a live server and independent watchdog check on your Pi, stop any existing
 server and run:
 

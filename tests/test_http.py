@@ -79,3 +79,41 @@ class HTTPTests(unittest.TestCase):
             self.request('/command', {'session': session, 'sequence': 0, 'action': 'forward'})
         self.assertEqual(faults, [True])
         self.assertIsNone(self.robot.session)
+
+    def test_non_string_actions_are_bad_requests_not_hardware_faults(self):
+        faults = []
+        self.handler = make_handler(self.robot, '', 'test-token', True,
+                                    lambda: faults.append(True))
+        session = self.robot.acquire()
+        for action in ([], {}, None, 1):
+            with self.subTest(action=action):
+                self.assertEqual(self.request('/command', {
+                    'session': session, 'sequence': 0, 'action': action})[0], 400)
+        self.assertEqual(faults, [])
+        self.assertEqual(self.request('/command', {
+            'session': session, 'sequence': 0, 'action': 'forward'})[0], 200)
+
+    def test_response_disconnect_does_not_shutdown_service(self):
+        faults = []
+        self.handler = make_handler(self.robot, '', 'test-token', True,
+                                    lambda: faults.append(True))
+        with patch.object(Connection, 'sendall', side_effect=BrokenPipeError):
+            with self.assertRaises(BrokenPipeError):
+                self.request('/acquire', {})
+        self.assertEqual(faults, [])
+        self.assertIsNotNone(self.robot.session)
+
+    def test_body_timeout_does_not_shutdown_service(self):
+        faults = []
+        self.handler = make_handler(self.robot, '', 'test-token', True,
+                                    lambda: faults.append(True))
+        class StalledInput(io.BytesIO):
+            def read(self, *args):
+                raise TimeoutError('Client stopped sending')
+        connection = Connection(b'')
+        connection.input = StalledInput(
+            b'POST /acquire HTTP/1.0\r\nHost: localhost\r\n'
+            b'X-Control-Token: test-token\r\nContent-Length: 2\r\n\r\n')
+        self.handler(connection, ('127.0.0.1', 1234), None)
+        self.assertEqual(faults, [])
+        self.assertIsNone(self.robot.session)
