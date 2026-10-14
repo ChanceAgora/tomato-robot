@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tomato Robot</title>
+<style>
+body{font:18px system-ui;background:#f4f1e8;color:#242820;max-width:440px;margin:24px auto;padding:16px}h1{font-size:30px}button{font:inherit;min-height:70px;border:2px solid #365940;border-radius:12px;background:#fff;touch-action:none;user-select:none;-webkit-user-select:none}button:active{background:#d0e7ce}.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:24px 0}.forward{grid-column:2}.left{grid-column:1}.backward{grid-column:2}.actions{display:grid;grid-template-columns:1fr 1fr;gap:12px}#stop{background:#b83227;color:white;border-color:#b83227}#status{min-height:70px}small{display:block;margin-top:22px;line-height:1.5}
+</style>
+<h1>Tomato Robot</h1>
+<p id="status" role="status" aria-live="polite">Connecting…</p>
+<div class="pad">
+<button class="forward" data-move="forward">↑ Forward</button>
+<button class="left" data-move="left">← Left</button>
+<button id="stop">Stop</button>
+<button data-move="right">Right →</button>
+<button class="backward" data-move="backward">↓ Backward</button>
+</div>
+<div class="actions"><button id="release">Release</button><button id="reset">Reset latch</button></div>
+<small>Hold a direction to drive. Let go to stop. Reset closes the latch; reload manually before resetting. Release opens it once. After a connection error, let go and press again.</small>
+<script>
+const token = '__TOKEN__';
+const statusBox = document.querySelector('#status');
+let held = null, generation = 0, busy = false;
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function post(path, body) {
+  const response = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json','X-Control-Token':token}, body:JSON.stringify(body), signal:AbortSignal.timeout(1000)});
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || 'Request failed');
+  return result;
+}
+function endMovement() {
+  held = null; generation++;
+  // Delivery is best effort. The independent Pi timeout also stops movement.
+  post('/stop', {}).catch(() => {});
+}
+async function beginMovement(button, event) {
+  if (held || busy || (event.button !== undefined && event.button !== 0)) return;
+  event.preventDefault();
+  button.setPointerCapture(event.pointerId);
+  held = event.pointerId;
+  const mine = ++generation;
+  try {
+    const {session} = await post('/acquire', {});
+    let sequence = 0;
+    while (held !== null && mine === generation) {
+      // Only one request in flight: never build a backlog of movement commands.
+      await post('/command', {session, sequence:sequence++, action:button.dataset.move});
+      await delay(100);
+    }
+  } catch (error) {
+    if (mine === generation) {
+      endMovement();
+      statusBox.textContent = error.message;
+    }
+  }
+}
+for (const button of document.querySelectorAll('[data-move]')) {
+  button.addEventListener('pointerdown', event => beginMovement(button,event));
+  for (const name of ['pointerup','pointercancel','lostpointercapture']) {
+    button.addEventListener(name, event => {
+      if (held === event.pointerId) endMovement();
+    });
+  }
+  button.addEventListener('contextmenu', event => event.preventDefault());
+}
+document.querySelector('#stop').addEventListener('click', endMovement);
+window.addEventListener('blur', endMovement);
+window.addEventListener('pagehide', endMovement);
+document.addEventListener('visibilitychange', () => {if(document.hidden) endMovement();});
+async function latchAction(action) {
+  if (held !== null || busy) return;
+  busy = true;
+  try {
+    const {session} = await post('/acquire', {});
+    await post('/command', {session, sequence:0, action});
+  } catch (error) {
+    statusBox.textContent = error.message;
+  } finally {busy = false;}
+}
+document.querySelector('#release').addEventListener('click', () => latchAction('release'));
+document.querySelector('#reset').addEventListener('click', () => latchAction('reset'));
+async function refresh() {
+  try {
+    const response = await fetch('/status', {signal:AbortSignal.timeout(1000)});
+    if (!response.ok) throw new Error('Status unavailable');
+    const state = await response.json();
+    statusBox.textContent = `${state.simulation ? 'SIMULATION — ' : ''}${state.motion} · latch ${state.latch} · ${state.primed ? 'primed' : 'reset required'}`;
+    document.querySelector('#release').disabled = !state.primed || state.motion !== 'stop' || held !== null;
+    document.querySelector('#reset').disabled = state.motion !== 'stop' || held !== null;
+  } catch (error) {
+    endMovement();
+    statusBox.textContent = 'Connection lost — release and press again.';
+    document.querySelector('#release').disabled = true;
+    document.querySelector('#reset').disabled = true;
+  }
+}
+refresh(); setInterval(refresh, 500);
+</script>
+</html>
