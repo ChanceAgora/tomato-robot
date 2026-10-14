@@ -2,6 +2,7 @@
 import io
 import json
 import unittest
+from unittest.mock import patch
 from controller import Controller
 from hardware import SimulatedHardware
 from main import make_handler
@@ -56,6 +57,7 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(result['motion'], 'forward')
         self.assertEqual(self.request('/stop', {})[1]['motion'], 'stop')
 
+    @patch("config.ALLOWED_HOSTS", {"localhost", "127.0.0.1"})
     def test_token_host_and_input_validation(self):
         self.assertEqual(self.request('/acquire', {}, token=False)[0], 403)
         self.assertEqual(self.request('/status', host='untrusted.example')[0], 403)

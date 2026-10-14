@@ -66,11 +66,17 @@ for this Pi, including other Serve routes if any exist.
 ## Hardware setup — before enabling GPIO
 
 The settings are deliberately examples. Set `HARDWARE_CONFIRMED = True` only after
-checking the following with your actual parts. Hardware mode is selected explicitly:
+checking the following with your actual parts. Hardware mode is selected explicitly. From the project folder, run:
 
 ```sh
-python3 main.py --hardware
+./start-robot.sh
 ```
+
+The launcher selects hardware mode and works even when the project path contains
+spaces. The program chooses the `lgpio` backend automatically. Stop with Ctrl+C.
+If a file transfer removes the executable permission, run `sh start-robot.sh`
+instead. The direct equivalent is `python3 main.py --hardware`.
+Simulation still uses `python3 main.py`.
 
 Install GPIO Zero and a supported GPIO backend on the Pi. With Debian 13, a
 system-package setup to try is:
@@ -78,7 +84,7 @@ system-package setup to try is:
 ```sh
 sudo apt update
 sudo apt install python3-gpiozero python3-lgpio
-GPIOZERO_PIN_FACTORY=lgpio python3 main.py --hardware
+./start-robot.sh
 ```
 
 Package availability, GPIO device permissions, and kernel support depend on the
@@ -165,6 +171,7 @@ motor drive; actual stopping distance depends on speed, inertia, and driver brak
 - `hardware.py`: simulated outputs and real MDD10A/servo outputs.
 - `controller.py`: session ownership, movement expiry, latch state.
 - `main.py`: local HTTP server and independent watchdog thread.
+- `start-robot.sh`: short launcher for real hardware mode.
 - `static/index.html`: touch interface and movement heartbeat.
 - `tests/`: standard-library automated tests.
 

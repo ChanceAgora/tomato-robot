@@ -1,4 +1,5 @@
 """Simulated hardware and the Cytron MDD10A PWM/DIR interface."""
+import os
 import config
 
 
@@ -31,6 +32,8 @@ class PiHardware:
                 config.RIGHT_DIR_PIN, config.SERVO_PIN)
         if len(set(pins)) != len(pins):
             raise ValueError("Each output requires a different GPIO pin")
+        # Select the Pi backend automatically; allow an explicit environment override.
+        os.environ.setdefault("GPIOZERO_PIN_FACTORY", "lgpio")
         from gpiozero import DigitalOutputDevice, PWMOutputDevice, Servo
         self.outputs = []
         try:
